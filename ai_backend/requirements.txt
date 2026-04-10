@@ -8,3 +8,4 @@ httpx
 rich
 joblib
 python-multipart
+requests
