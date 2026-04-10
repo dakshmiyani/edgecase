@@ -1,0 +1,29 @@
+{
+  "name": "@secureaipay/sdk",
+  "version": "1.0.0",
+  "description": "Official JavaScript SDK for SecureAiPay — AI-powered, encrypted payment processing",
+  "main": "src/index.js",
+  "types": "types/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "test": "node examples/basic-payment.js",
+    "lint": "eslint src/"
+  },
+  "keywords": [
+    "payment",
+    "fintech",
+    "fraud-detection",
+    "encryption",
+    "ai-payments",
+    "secureaipay"
+  ],
+  "author": "SecureAiPay",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "crypto": "^1.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
