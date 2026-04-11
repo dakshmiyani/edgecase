@@ -8,15 +8,18 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
-import { Monitor, FileText, ChevronLeft, ChevronRight, Loader2, Building, Terminal } from 'lucide-react';
+import { Monitor, FileText, ChevronLeft, ChevronRight, Loader2, Building, Terminal, CreditCard } from 'lucide-react';
 import ApiKeyManager from '../dashboard/ApiKeyManager';
 
 export default function AdminDashboard() {
   const { user } = useAuthStore();
-  const [activeTab, setActiveTab] = useState('monitor'); // 'monitor' | 'users' | 'developer'
+  const [activeTab, setActiveTab] = useState('monitor'); // 'monitor' | 'users' | 'transactions' | 'developer'
   const [logs, setLogs] = useState([]);
+  const [txs, setTxs] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0 });
+  const [txPagination, setTxPagination] = useState({ page: 1, limit: 20, total: 0 });
   const [logLoading, setLogLoading] = useState(true);
+  const [txLoading, setTxLoading] = useState(false);
 
   const fetchLogs = async (page = 1) => {
     setLogLoading(true);
@@ -31,8 +34,22 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchTransactions = async (page = 1) => {
+    setTxLoading(true);
+    try {
+      const { data } = await api.get('/merchant/transactions/org', { params: { page, limit: 20 } });
+      setTxs(data.transactions);
+      setTxPagination(data.pagination);
+    } catch (err) {
+      console.error('Failed to fetch org transactions for admin:', err);
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchLogs();
+    fetchTransactions();
   }, []);
 
   const actionColors = {
@@ -65,7 +82,7 @@ export default function AdminDashboard() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-white/5 p-1 rounded-xl w-fit">
-        {['monitor', 'users', 'developer'].map(tab => (
+        {['monitor', 'users', 'transactions', 'developer'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -80,6 +97,67 @@ export default function AdminDashboard() {
 
       {activeTab === 'users' ? (
         <UserManagement />
+      ) : activeTab === 'transactions' ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-emerald-400" />
+              Organization Transactions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Txn ID</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {txLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto text-violet-400" />
+                    </TableCell>
+                  </TableRow>
+                ) : txs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-white/30">
+                      No transactions found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  txs.map((tx) => (
+                    <TableRow key={tx.txn_id}>
+                      <TableCell className="font-mono text-[10px] text-white/70">{tx.txn_id}</TableCell>
+                      <TableCell>
+                        <p className="text-xs font-medium text-white">{tx.customer_name}</p>
+                        <p className="text-[10px] text-white/40 font-mono">{tx.user_token_id}</p>
+                      </TableCell>
+                      <TableCell>
+                        <p className="text-[11px] text-white/60">{tx.customer_email}</p>
+                        <p className="text-[10px] text-white/30">{tx.customer_phone}</p>
+                      </TableCell>
+                      <TableCell className="font-medium text-white">₹{tx.amount?.toLocaleString() || '—'}</TableCell>
+                      <TableCell>
+                        <Badge variant={tx.status === 'completed' ? 'success' : 'outline'} className="text-[10px] uppercase">
+                          {tx.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-white/30">
+                        {new Date(tx.created_at).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       ) : activeTab === 'developer' ? (
         <ApiKeyManager />
       ) : (

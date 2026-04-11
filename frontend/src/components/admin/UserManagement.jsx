@@ -160,7 +160,8 @@ export default function UserManagement() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>User Token</TableHead>
+                <TableHead>User / Token</TableHead>
+                <TableHead>Contact</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Registered</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -169,22 +170,31 @@ export default function UserManagement() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-10 text-white/20">
+                  <TableCell colSpan={5} className="text-center py-10 text-white/20">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                     Loading system users...
                   </TableCell>
                 </TableRow>
               ) : filteredUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-10 text-white/20">
+                  <TableCell colSpan={5} className="text-center py-10 text-white/20">
                     No users found matching "{search}"
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredUsers.map((user) => (
                   <TableRow key={user.user_token_id}>
-                    <TableCell className="font-mono text-xs text-violet-300">
-                      {user.user_token_id}
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-white">{user.name || 'Anonymous'}</span>
+                        <span className="text-[10px] font-mono text-white/30">{user.user_token_id}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-[11px] text-white/60">{user.email || '—'}</span>
+                        <span className="text-[10px] text-white/30">{user.phone || '—'}</span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">

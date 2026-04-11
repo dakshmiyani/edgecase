@@ -1,6 +1,8 @@
 import redis from '../../redis/redis.client.js';
 import { pg } from '../../config/db.js';
 import { AccessEvent } from '../audit-log/access-audit.model.js';
+import { encrypt, decrypt, hashValue } from '../../common/utils/encryption.js';
+import env from '../../config/env.js';
 
 /**
  * GET /admin/health
@@ -180,15 +182,63 @@ export async function getDecisionStats(req, res) {
  */
 export async function getSystemUsers(req, res) {
   try {
+    const masterKey = Buffer.from(env.ENCRYPTION_MASTER_KEY, 'hex');
+
     const users = await pg('users')
       .where({ 
         organization_id: req.user.org_id,
         is_deleted: false 
       })
-      .select('user_token_id', 'name', 'phone', 'role', 'created_at')
+      .select(
+        'user_token_id', 'role', 'created_at',
+        'name_cipher', 'name_iv', 'name_tag',
+        'email_cipher', 'email_iv', 'email_tag',
+        'phone_cipher', 'phone_iv', 'phone_tag'
+      )
       .orderBy('created_at', 'desc');
     
-    res.json(users);
+    const decryptedUsers = users.map(u => {
+      let name = null;
+      let email = null;
+      let phone = null;
+
+      try {
+        if (u.name_cipher) {
+          name = decrypt(Buffer.from(JSON.stringify({
+            data: u.name_cipher,
+            iv: u.name_iv,
+            tag: u.name_tag
+          })).toString('base64'), masterKey);
+        }
+        if (u.email_cipher) {
+          email = decrypt(Buffer.from(JSON.stringify({
+            data: u.email_cipher,
+            iv: u.email_iv,
+            tag: u.email_tag
+          })).toString('base64'), masterKey);
+        }
+        if (u.phone_cipher) {
+          phone = decrypt(Buffer.from(JSON.stringify({
+            data: u.phone_cipher,
+            iv: u.phone_iv,
+            tag: u.phone_tag
+          })).toString('base64'), masterKey);
+        }
+      } catch (err) {
+        console.warn(`Decryption failed for user ${u.user_token_id}:`, err.message);
+      }
+
+      return {
+        user_token_id: u.user_token_id,
+        name: name || 'Encrypted',
+        email: email || 'Encrypted',
+        phone: phone || 'Encrypted',
+        role: u.role,
+        created_at: u.created_at
+      };
+    });
+
+    res.json(decryptedUsers);
   } catch (err) {
     console.error('List users error:', err.message);
     res.status(500).json({ error: 'Failed to retrieve users' });
@@ -200,11 +250,11 @@ export async function getSystemUsers(req, res) {
  * Add a new team member to the organization
  */
 export async function addTeamMember(req, res) {
-  const { name, phone, role } = req.body;
+  const { name, email, phone, role } = req.body;
   const org_id = req.user.org_id;
 
-  if (!phone || !role) {
-    return res.status(400).json({ error: 'Phone and role are required' });
+  if (!email || !phone || !role) {
+    return res.status(400).json({ error: 'Email, phone and role are required' });
   }
 
   // Define allowed roles for this brand management
@@ -214,22 +264,43 @@ export async function addTeamMember(req, res) {
   }
 
   try {
+    const masterKey = Buffer.from(env.ENCRYPTION_MASTER_KEY, 'hex');
     const user_token_id = `usr_${(Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10)).slice(0, 12)}`;
     
+    // Encrypt PII
+    const nameEnc = name ? JSON.parse(Buffer.from(encrypt(name, masterKey), 'base64').toString('utf8')) : null;
+    const emailEnc = JSON.parse(Buffer.from(encrypt(email, masterKey), 'base64').toString('utf8'));
+    const phoneEnc = JSON.parse(Buffer.from(encrypt(phone, masterKey), 'base64').toString('utf8'));
+
     const [newUser] = await pg('users').insert({
       user_token_id,
       organization_id: org_id,
-      name,
-      phone,
+      name_cipher: nameEnc?.data,
+      name_iv: nameEnc?.iv,
+      name_tag: nameEnc?.tag,
+      name_hash: name ? hashValue(name) : null,
+      email_cipher: emailEnc.data,
+      email_iv: emailEnc.iv,
+      email_tag: emailEnc.tag,
+      email_hash: hashValue(email),
+      phone_cipher: phoneEnc.data,
+      phone_iv: phoneEnc.iv,
+      phone_tag: phoneEnc.tag,
+      phone_hash: hashValue(phone),
       role,
       is_active: true
-    }).returning(['user_token_id', 'name', 'role', 'created_at']);
+    }).returning(['user_token_id', 'role', 'created_at']);
 
-    res.status(201).json(newUser);
+    res.status(201).json({
+      ...newUser,
+      name,
+      email,
+      phone
+    });
   } catch (err) {
     console.error('Add team member error:', err);
     if (err.code === '23505') {
-      return res.status(400).json({ error: 'User with this phone or token already exists' });
+      return res.status(400).json({ error: 'User with this email, phone or token already exists' });
     }
     res.status(500).json({ error: 'Failed to add team member' });
   }

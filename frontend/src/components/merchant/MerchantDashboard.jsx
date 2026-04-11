@@ -53,12 +53,20 @@ function StatCard({ icon: Icon, label, value, sub, color = 'violet' }) {
 }
 
 export default function MerchantDashboard() {
-  const { mappedUsers, pagination, rateLimit, transactions, fetchMappedUsers, fetchTransactions, isLoading } = useMerchantStore();
+  const { 
+    mappedUsers, pagination, rateLimit, transactions, 
+    orgTransactions, orgTxPagination, 
+    fetchMappedUsers, fetchTransactions, fetchOrgTransactions, 
+    isLoading 
+  } = useMerchantStore();
   const [selectedUser, setSelectedUser] = useState(null);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState('customers'); // customers | overview
+  const [activeTab, setActiveTab] = useState('customers'); // customers | org-transactions | map-user | developer
 
-  useEffect(() => { fetchMappedUsers(); }, [fetchMappedUsers]);
+  useEffect(() => { 
+    fetchMappedUsers(); 
+    fetchOrgTransactions();
+  }, [fetchMappedUsers, fetchOrgTransactions]);
 
   const filtered = mappedUsers.filter(u =>
     u.user_token_id?.toLowerCase().includes(search.toLowerCase()) ||
@@ -100,15 +108,20 @@ export default function MerchantDashboard() {
 
       {/* ─── Tabs ─── */}
       <div className="flex gap-1 bg-white/5 p-1 rounded-xl w-fit">
-        {['customers', 'map-user', 'developer'].map(tab => (
+        {[
+          { id: 'customers', label: 'My Customers' },
+          { id: 'org-transactions', label: 'All Transactions' },
+          { id: 'map-user', label: 'Add Customer' },
+          { id: 'developer', label: 'Developer' }
+        ].map(tab => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
             className={`text-xs px-4 py-2 rounded-lg font-medium transition-all ${
-              activeTab === tab ? 'bg-violet-600 text-white' : 'text-white/40 hover:text-white/70'
+              activeTab === tab.id ? 'bg-violet-600 text-white' : 'text-white/40 hover:text-white/70'
             }`}
           >
-            {tab === 'customers' ? 'My Customers' : tab === 'map-user' ? 'Add Customer' : 'Developer'}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -128,6 +141,44 @@ export default function MerchantDashboard() {
           </CardContent>
         </Card>
       )}
+      {activeTab === 'org-transactions' && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-white/10 overflow-hidden">
+            <div className="grid grid-cols-[1.2fr_1.5fr_1.5fr_1fr_1fr_auto] px-5 py-3 bg-white/5 border-b border-white/10 text-xs font-medium text-white/40 uppercase tracking-wider">
+              <span>Transaction ID</span>
+              <span>Customer</span>
+              <span>Contact</span>
+              <span>Amount</span>
+              <span>Status</span>
+              <span>Date</span>
+            </div>
+            {orgTransactions.length === 0 ? (
+              <div className="text-center py-16 text-white/30">
+                <p>No transactions found for this organization</p>
+              </div>
+            ) : (
+              orgTransactions.map((tx, i) => (
+                <div key={tx.txn_id} className={`grid grid-cols-[1.2fr_1.5fr_1.5fr_1fr_1fr_auto] items-center px-5 py-4 hover:bg-white/5 transition-colors ${i !== orgTransactions.length - 1 ? 'border-b border-white/5' : ''}`}>
+                  <span className="text-[10px] font-mono text-white/70 truncate">{tx.txn_id}</span>
+                  <div>
+                    <p className="text-sm font-medium text-white truncate">{tx.customer_name}</p>
+                    <p className="text-[10px] text-white/40 font-mono truncate">{tx.user_token_id}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/60 truncate">{tx.customer_email}</p>
+                    <p className="text-[10px] text-white/30 truncate">{tx.customer_phone}</p>
+                  </div>
+                  <span className="text-sm font-bold text-white">₹{tx.amount?.toLocaleString() || '—'}</span>
+                  <Badge variant={tx.status === 'completed' ? 'success' : 'outline'} className="w-fit text-[10px] uppercase">
+                    {tx.status}
+                  </Badge>
+                  <span className="text-xs text-white/30">{new Date(tx.created_at).toLocaleDateString()}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {activeTab === 'customers' && (
         <div className="space-y-4">
@@ -145,8 +196,9 @@ export default function MerchantDashboard() {
           {/* ─── Customer Table (Razorpay-style) ─── */}
           <div className="rounded-xl border border-white/10 overflow-hidden">
             {/* Header */}
-            <div className="grid grid-cols-[1fr_1fr_1fr_auto] px-5 py-3 bg-white/5 border-b border-white/10 text-xs font-medium text-white/40 uppercase tracking-wider">
+            <div className="grid grid-cols-[1.2fr_1.2fr_1fr_1fr_auto] px-5 py-3 bg-white/5 border-b border-white/10 text-xs font-medium text-white/40 uppercase tracking-wider">
               <span>Customer</span>
+              <span>Contact</span>
               <span>Internal ID</span>
               <span>Linked</span>
               <span>Action</span>
@@ -201,20 +253,26 @@ function CustomerRow({ user, onView, isLast }) {
 
   return (
     <div
-      className={`grid grid-cols-[1fr_1fr_1fr_auto] items-center px-5 py-4 hover:bg-white/5 transition-colors cursor-pointer group ${!isLast ? 'border-b border-white/5' : ''}`}
+      className={`grid grid-cols-[1.2fr_1.2fr_1fr_1fr_auto] items-center px-5 py-4 hover:bg-white/5 transition-colors cursor-pointer group ${!isLast ? 'border-b border-white/5' : ''}`}
       onClick={onView}
     >
-      {/* Customer token */}
+      {/* Customer identity */}
       <div className="flex items-center gap-3 min-w-0">
         <div className="w-8 h-8 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
           <span className="text-[10px] font-bold text-violet-400">
-            {user.user_token_id?.slice(4, 6).toUpperCase()}
+            {(user.name?.[0] || user.user_token_id?.slice(4, 6)).toUpperCase()}
           </span>
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-mono text-white/80 truncate">{user.user_token_id}</p>
-          <p className="text-xs text-white/30">Verified customer</p>
+          <p className="text-sm font-medium text-white truncate">{user.name || 'Anonymous'}</p>
+          <p className="text-[10px] font-mono text-white/30 truncate">{user.user_token_id}</p>
         </div>
+      </div>
+
+      {/* Contact info */}
+      <div className="min-w-0">
+        <p className="text-[11px] text-white/60 truncate">{user.email || '—'}</p>
+        <p className="text-[10px] text-white/30">{user.phone || '—'}</p>
       </div>
 
       {/* Internal ID */}

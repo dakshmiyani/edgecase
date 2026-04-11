@@ -73,8 +73,13 @@ export default function Sidebar() {
       {/* User Info + Logout */}
       <div className="p-4 border-t border-white/[0.06]">
         <div className="px-4 py-2 mb-2">
-          <p className="text-xs text-white/30 font-mono truncate">{user?.user_token_id || 'usr_***'}</p>
-          <p className="text-xs text-violet-400 capitalize mt-0.5">{user?.role || 'user'}</p>
+          <p className="text-sm font-medium text-white truncate">{user?.name || 'User'}</p>
+          <p className="text-[10px] text-white/40 uppercase tracking-widest mt-0.5">{user?.brand || 'SecureAI Pay'}</p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+            <p className="text-[10px] text-violet-400 capitalize font-medium tracking-wider">{user?.role || 'user'}</p>
+          </div>
+          <p className="text-[9px] text-white/20 font-mono truncate mt-1.5 opacity-50">{user?.user_token_id}</p>
         </div>
         <button
           onClick={handleLogout}

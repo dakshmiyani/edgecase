@@ -8,6 +8,8 @@ export const useMerchantStore = create((set) => ({
   rateLimit: { remaining: 100, limit: 100 },
   transactions: [],
   txPagination: { page: 1, limit: 20, total: 0 },
+  orgTransactions: [],
+  orgTxPagination: { page: 1, limit: 20, total: 0 },
   isLoading: false,
   error: null,
 
@@ -65,6 +67,23 @@ export const useMerchantStore = create((set) => ({
       });
     } catch (err) {
       set({ error: err.response?.data?.error || 'Failed to load transactions', isLoading: false });
+    }
+  },
+
+  // Fetch all transactions for the organization
+  fetchOrgTransactions: async (page = 1) => {
+    set({ isLoading: true, error: null });
+    try {
+      const { data } = await api.get('/merchant/transactions/org', {
+        params: { page },
+      });
+      set({
+        orgTransactions: data.transactions,
+        orgTxPagination: data.pagination,
+        isLoading: false,
+      });
+    } catch (err) {
+      set({ error: err.response?.data?.error || 'Failed to load organization transactions', isLoading: false });
     }
   },
 

@@ -18,7 +18,12 @@ export const useAuthStore = create((set, get) => ({
     try {
       const { data } = await api.post('/users/create', { email, phone, role });
       set({
-        user: { user_token_id: data.user_token_id, role },
+        user: { 
+          user_token_id: data.user_token_id, 
+          role, 
+          name: data.name || role,
+          brand: data.brand
+        },
         isLoading: false,
       });
       return data;
@@ -64,6 +69,8 @@ export const useAuthStore = create((set, get) => ({
         user: { 
           user_token_id: data.user_token_id, 
           role: data.role,
+          name: data.name || data.role,
+          brand: data.brand,
           org_token_id: data.org_token_id 
         },
         isAuthenticated: true,
@@ -90,6 +97,8 @@ export const useAuthStore = create((set, get) => ({
         user: { 
           user_token_id: data.user_token_id, 
           role: data.role,
+          name: data.name || data.role,
+          brand: data.brand,
           org_token_id: data.org_token_id
         },
         isLoading: false

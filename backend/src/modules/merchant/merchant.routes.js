@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { mapToken, getMappedUsers, getTransactions, createTransaction } from './merchant.controller.js';
+import { mapToken, getMappedUsers, getTransactions, getOrgTransactions, createTransaction } from './merchant.controller.js';
 import { authenticate } from '../../common/middleware/auth.middleware.js';
 import { requireRole } from '../../common/middleware/rbac.middleware.js';
 import { validateMerchantMap } from '../../common/middleware/validator.middleware.js';
@@ -12,7 +12,10 @@ router.post('/map', authenticate, requireRole('merchant', 'admin'), validateMerc
 // GET /api/merchant/users — List mapped users
 router.get('/users', authenticate, requireRole('merchant', 'admin'), getMappedUsers);
 
-// GET /api/merchant/transactions/:user_token — Transaction history
+// GET /api/merchant/transactions/org — All organization transactions
+router.get('/transactions/org', authenticate, requireRole('merchant', 'admin'), getOrgTransactions);
+
+// GET /api/merchant/transactions/:user_token — Transaction history for specific user
 router.get('/transactions/:user_token', authenticate, requireRole('merchant', 'admin'), getTransactions);
 
 // POST /api/merchant/transaction — New payment with AI scoring

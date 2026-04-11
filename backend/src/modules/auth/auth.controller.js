@@ -1,5 +1,5 @@
 import { pg } from '../../config/db.js';
-import { hashValue } from '../../common/utils/encryption.js';
+import { hashValue, decrypt } from '../../common/utils/encryption.js';
 import { generateOTP, verifyOTP } from './otp.service.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken, invalidateSession } from './auth.service.js';
 import { registerDevice } from '../../common/middleware/device-fingerprint.middleware.js';
@@ -77,11 +77,28 @@ export async function verifyOTPHandler(req, res) {
     const user = await pg('users as u')
       .join('organizations as o', 'u.organization_id', 'o.id')
       .where({ 'u.user_token_id': user_token_id, 'u.is_deleted': false })
-      .select('u.role', 'u.organization_id', 'o.org_token_id')
+      .select(
+        'u.role', 'u.organization_id', 'o.org_token_id', 'o.name as brand_name',
+        'u.name_cipher', 'u.name_iv', 'u.name_tag'
+      )
       .first();
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    let name = null;
+    if (user.name_cipher) {
+      try {
+        const masterKey = Buffer.from(env.ENCRYPTION_MASTER_KEY, 'hex');
+        name = decrypt(Buffer.from(JSON.stringify({
+          data: user.name_cipher,
+          iv: user.name_iv,
+          tag: user.name_tag
+        })).toString('base64'), masterKey);
+      } catch (err) {
+        console.warn('Name decryption failed at login:', err.message);
+      }
     }
 
     const payload = { 
@@ -123,6 +140,8 @@ export async function verifyOTPHandler(req, res) {
       message: 'Authentication successful',
       user_token_id,
       role: user.role,
+      name: name || user.role,
+      brand: user.brand_name,
       org_token_id: user.org_token_id
     });
   } catch (err) {
@@ -151,11 +170,28 @@ export async function refreshAuth(req, res) {
     const user = await pg('users as u')
       .join('organizations as o', 'u.organization_id', 'o.id')
       .where({ 'u.user_token_id': decoded.user_token_id, 'u.is_deleted': false })
-      .select('u.role', 'u.organization_id', 'o.org_token_id')
+      .select(
+        'u.role', 'u.organization_id', 'o.org_token_id', 'o.name as brand_name',
+        'u.name_cipher', 'u.name_iv', 'u.name_tag'
+      )
       .first();
 
     if (!user) {
       return res.status(401).json({ error: 'User no longer exists' });
+    }
+
+    let name = null;
+    if (user.name_cipher) {
+      try {
+        const masterKey = Buffer.from(env.ENCRYPTION_MASTER_KEY, 'hex');
+        name = decrypt(Buffer.from(JSON.stringify({
+          data: user.name_cipher,
+          iv: user.name_iv,
+          tag: user.name_tag
+        })).toString('base64'), masterKey);
+      } catch (err) {
+        console.warn('Name decryption failed at refresh:', err.message);
+      }
     }
 
     const accessToken = signAccessToken({
@@ -174,6 +210,8 @@ export async function refreshAuth(req, res) {
       message: 'Token refreshed',
       user_token_id: decoded.user_token_id,
       role: user.role,
+      name: name || user.role,
+      brand: user.brand_name,
       org_token_id: user.org_token_id
     });
   } catch (err) {
