@@ -1,6 +1,8 @@
 import redis from '../../redis/redis.client.js';
 import { pg } from '../../config/db.js';
 import { AccessEvent } from '../audit-log/access-audit.model.js';
+import { encrypt, decrypt, hashValue } from '../../common/utils/encryption.js';
+import env from '../../config/env.js';
 
 /**
  * GET /admin/health
@@ -180,13 +182,51 @@ export async function getDecisionStats(req, res) {
  */
 export async function getSystemUsers(req, res) {
   try {
-    const users = await pg('users')
+    const rawUsers = await pg('users')
       .where({ 
         organization_id: req.user.org_id,
         is_deleted: false 
       })
-      .select('user_token_id', 'name', 'phone', 'role', 'created_at')
+      .select(
+        'user_token_id', 'role', 'created_at',
+        'name_cipher', 'name_iv', 'name_tag',
+        'phone_cipher', 'phone_iv', 'phone_tag'
+      )
       .orderBy('created_at', 'desc');
+    
+    // Decrypt the data
+    const masterKey = Buffer.from(env.ENCRYPTION_MASTER_KEY, 'hex');
+    const users = rawUsers.map(user => {
+      let name = null;
+      let phone = null;
+
+      try {
+        if (user.name_cipher) {
+          name = decrypt(Buffer.from(JSON.stringify({
+            data: user.name_cipher,
+            iv: user.name_iv,
+            tag: user.name_tag
+          })).toString('base64'), masterKey);
+        }
+        if (user.phone_cipher) {
+          phone = decrypt(Buffer.from(JSON.stringify({
+            data: user.phone_cipher,
+            iv: user.phone_iv,
+            tag: user.phone_tag
+          })).toString('base64'), masterKey);
+        }
+      } catch (err) {
+         // silently fail decryption for this particular record if tampered
+      }
+
+      return {
+        user_token_id: user.user_token_id,
+        role: user.role,
+        created_at: user.created_at,
+        name: name || 'Encrypted',
+        phone: phone || 'Encrypted'
+      };
+    });
     
     res.json(users);
   } catch (err) {
@@ -195,16 +235,12 @@ export async function getSystemUsers(req, res) {
   }
 }
 
-/**
- * POST /admin/users
- * Add a new team member to the organization
- */
 export async function addTeamMember(req, res) {
-  const { name, phone, role } = req.body;
+  const { name, phone, role, email = '' } = req.body;
   const org_id = req.user.org_id;
 
-  if (!phone || !role) {
-    return res.status(400).json({ error: 'Phone and role are required' });
+  if (!phone || !role || !name) {
+    return res.status(400).json({ error: 'Name, phone and role are required' });
   }
 
   // Define allowed roles for this brand management
@@ -216,16 +252,36 @@ export async function addTeamMember(req, res) {
   try {
     const user_token_id = `usr_${(Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10)).slice(0, 12)}`;
     
+    const masterKey = Buffer.from(env.ENCRYPTION_MASTER_KEY, 'hex');
+
+    const encryptedName = encrypt(name, masterKey);
+    const parsedName = JSON.parse(Buffer.from(encryptedName, 'base64').toString('utf8'));
+
+    const encryptedPhone = encrypt(phone, masterKey);
+    const parsedPhone = JSON.parse(Buffer.from(encryptedPhone, 'base64').toString('utf8'));
+
+    const encryptedEmail = encrypt(email || `demo-${Date.now()}@example.com`, masterKey);
+    const parsedEmail = JSON.parse(Buffer.from(encryptedEmail, 'base64').toString('utf8'));
+
     const [newUser] = await pg('users').insert({
       user_token_id,
       organization_id: org_id,
-      name,
-      phone,
       role,
-      is_active: true
-    }).returning(['user_token_id', 'name', 'role', 'created_at']);
+      name_cipher: parsedName.data,
+      name_iv: parsedName.iv,
+      name_tag: parsedName.tag,
+      name_hash: hashValue(name),
+      phone_cipher: parsedPhone.data,
+      phone_iv: parsedPhone.iv,
+      phone_tag: parsedPhone.tag,
+      phone_hash: hashValue(phone),
+      email_cipher: parsedEmail.data,
+      email_iv: parsedEmail.iv,
+      email_tag: parsedEmail.tag,
+      email_hash: hashValue(email || `demo-${Date.now()}@example.com`)
+    }).returning(['user_token_id', 'role', 'created_at']);
 
-    res.status(201).json(newUser);
+    res.status(201).json({ ...newUser, name, phone });
   } catch (err) {
     console.error('Add team member error:', err);
     if (err.code === '23505') {
